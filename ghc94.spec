@@ -1,4 +1,5 @@
 %global debug_package %{nil}
+%global _find_debuginfo_opts --no-ar-files
 Summary:	Glasgow Haskell Compiler 9.4.8 (bootstrapped with in-chain GHC 9.0.2)
 Name:		ghc94
 Version:	9.4.8
