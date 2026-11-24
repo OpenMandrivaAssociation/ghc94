@@ -94,6 +94,11 @@ fi
 exec /usr/bin/gcc "${args[@]}"
 EOF
 chmod 755 "$WORK/bin/gcc"
+# Packaged ghc90 records its C compiler as the bare name host-gcc.
+# /usr/bin/ghc90 adds the libdir bin directory to PATH, but configure
+# runs that command itself. Keep a copy beside gcc so CC_STAGE0 works.
+/bin/cp -f "$WORK/bin/gcc" "$WORK/bin/host-gcc"
+chmod 755 "$WORK/bin/host-gcc"
 
 cat > "$WORK/bootbin/ghc" << EOF
 #!/bin/sh
@@ -109,10 +114,12 @@ clean=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v -e '\.ghcup' -e '\.cabal' -e
 clean=$(printf '%s\n' "$clean" | paste -sd: -)
 export PATH="$WORK/bootbin:$TOOLS/bin:$WORK/bin:$clean"
 export CC="$WORK/bin/gcc"
+export CC_STAGE0="$WORK/bin/host-gcc"
 export CFLAGS="-std=gnu11 -w"
 hash -r
 command -v ghc | grep -F -q "$WORK/bootbin/ghc" || fail "PATH ghc is $(command -v ghc)"
 command -v gcc | grep -F -q "$WORK/bin/gcc" || fail "PATH gcc is $(command -v gcc)"
+command -v host-gcc | grep -F -q "$WORK/bin/host-gcc" || fail "PATH host-gcc is $(command -v host-gcc)"
 
 runlog() {
 	local log=$1
@@ -204,11 +211,12 @@ if ! ./configure --prefix="$PREFIX" GHC="$GHC" CC="$WORK/bin/gcc" \
 	--with-gmp-includes="$GMP_INC" --with-gmp-libraries="$GMP_LIB" \
 	CFLAGS="-std=gnu11 -w" > "$WORK/logs/configure.log" 2>&1
 then
-	fail "configure: $({ grep -E 'error:|Error |needed|cannot |Failed' "$WORK/logs/configure.log" || true; tail -15 "$WORK/logs/configure.log"; } | tr '\n' ' ' | cut -c1-2000)"
+	fail "configure: $({ grep -E 'error:|Error |cannot |Failed' "$WORK/logs/configure.log" || true; tail -15 "$WORK/logs/configure.log"; } | tr '\n' ' ' | cut -c1-2000)"
 fi
 grep -F "GHC=$GHC" config.log >/dev/null || fail "config.log did not record ghc90"
 grep -F "$TOOLS/bin/happy" mk/config.mk >/dev/null || fail "config.mk did not record happy"
 grep -F "$TOOLS/bin/alex" mk/config.mk >/dev/null || fail "config.mk did not record alex"
+grep -F "CC_STAGE0" mk/config.mk | grep -F "$WORK/bin/host-gcc" >/dev/null || fail "config.mk CC_STAGE0 is not host-gcc"
 phase "configured"
 
 phase "make -j$JOBS"
